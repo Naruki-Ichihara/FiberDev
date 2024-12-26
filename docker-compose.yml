@@ -1,7 +1,7 @@
 services:
   fiberdev:
     restart: always
-    image: ichiharanaruki/gpytop:latest
+    image: ichiharanaruki/fiberdev:latest
     container_name: 'fiberdev'
     working_dir: '/home/usr/mounted/'
     tty: true
