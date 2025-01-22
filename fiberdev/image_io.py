@@ -1,9 +1,43 @@
 import numpy as np
 import cupy as cp
+import pydicom as dicom
 from cucim.skimage.exposure import adjust_gamma
 import cv2 as cv
 from typing import Optional, Callable
 import matplotlib.pyplot as plt
+
+def export_image_sequence(volume: cp.ndarray, path: str, format: str, number_of_digit: int=4, axis: str="x") -> None:
+    """Export image sequence.
+
+    Args:
+        volume (cp.ndarray): Image sequence.
+        path (str): Name of image.
+        format (str): Format of image.
+        number_of_digit (int): Number of digits.
+        axis (str): Axis of image, "x", "y", or "z".
+
+    Returns:
+        None
+    
+    """
+    if axis == "x":
+        for i in range(volume.shape[0]):
+            image = volume[i, :, :] - cp.min(volume[i, :, :])
+            image = cp.asnumpy(image)
+            cv.imwrite(path + f'{i}'.zfill(number_of_digit) + '.' + format, image)
+    elif axis == "y":
+        for i in range(volume.shape[1]):
+            image = volume[:, i, :]
+            image = cp.asnumpy(image)
+            cv.imwrite(path + f'{i}'.zfill(number_of_digit) + '.' + format, image)
+    elif axis == "z":
+        for i in range(volume.shape[2]):
+            image = volume[:, :, i]
+            image = cp.asnumpy(image)
+            cv.imwrite(path + f'{i}'.zfill(number_of_digit) + '.' + format, image)
+    else:
+        raise ValueError("axis must be 'x', 'y', or 'z'.")
+    return
 
 def import_image(path: str, cvt_control: Optional[int] = cv.COLOR_BGR2GRAY) -> np.ndarray:
     """Import image from path.
@@ -19,6 +53,21 @@ def import_image(path: str, cvt_control: Optional[int] = cv.COLOR_BGR2GRAY) -> n
     image = cv.imread(path)
     if cvt_control is not None:
         image = cv.cvtColor(image, cvt_control)
+    cupy_image = cp.asarray(image)
+    return cupy_image
+
+def import_dicom(path: str) -> np.ndarray:
+    """Import DICOM image from path.
+    
+    Args:
+        path (str): Path to the image.
+        cvt_control (int): cvtColor control number.
+
+    Returns:
+        np.ndarray: Imported image.
+    """
+    dicom_image = dicom.dcmread(path)
+    image = dicom_image.pixel_array
     cupy_image = cp.asarray(image)
     return cupy_image
 
@@ -67,8 +116,12 @@ def import_image_sequence(path_template: str,
     
     if process is None:
         process = lambda image: image
-    
-    volume = cp.stack(
+    if format == "dcm":
+        volume = cp.stack(
+        [process(import_dicom(get_image_path(path_template, i, number_of_digits, format)))
+         for i in range(initial_number, number_of_images)], axis=0)
+    else:
+        volume = cp.stack(
         [process(import_image(get_image_path(path_template, i, number_of_digits, format), cvt_control))
          for i in range(initial_number, number_of_images)], axis=0)
     
