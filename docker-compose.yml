@@ -3,7 +3,7 @@ services:
     restart: always
     image: ichiharanaruki/fiberdev:latest
     container_name: 'fiberdev'
-    working_dir: '/home/usr/mounted/'
+    working_dir: '/home/'
     tty: true
     volumes:
       - ./:/home/usr/mounted

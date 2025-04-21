@@ -1,33 +1,13 @@
 import cupy as cp
 import numpy as np
-from cupyx.scipy.ndimage import gaussian_filter
 import cucim.skimage.feature as ski
-from typing import Iterable
 import numba
 import numba_progress
-from itertools import combinations_with_replacement
 
 symmetric_components_3D = [[0, 0], [0, 1], [0, 2], [1, 1], [1, 2], [2, 2]]
 
-def _multiply_and_filter(gradient_0, gradient_1, sigma):
-    return gaussian_filter(cp.multiply(gradient_0, gradient_1), sigma, mode="nearest")
 
-def compute_gradient_3D(volume: cp.ndarray) -> tuple:
-    sigma = 1
-    squeezed_volume = cp.squeeze(volume)
-    Gx = gaussian_filter(squeezed_volume, sigma, order=[0, 0, 1], mode="nearest")
-    Gy = gaussian_filter(squeezed_volume, sigma, order=[0, 1, 0], mode="nearest")
-    Gz = gaussian_filter(squeezed_volume, sigma, order=[1, 0, 0], mode="nearest")
-    return Gz, Gy, Gx
-
-def compute_structure_tensor(gradients: Iterable, sigma: int) -> cp.ndarray:
-    structure_tensor = cp.empty((len(symmetric_components_3D), *gradients[0].shape), dtype=float)
-    for n, [grad_0, grad_1] in enumerate(combinations_with_replacement(gradients, 2)):
-        structure_tensor[n] = _multiply_and_filter(grad_0, grad_1, sigma)
-
-    return structure_tensor
-
-def compute_structure_tensor_cucim(volume, sigma):
+def compute_structure_tensor(volume, sigma):
     """ Compute structure tensor using cucim.
 
     Args:
@@ -45,7 +25,7 @@ def compute_structure_tensor_cucim(volume, sigma):
     return tensors
 
 @numba.njit(parallel=True, cache=True)
-def orientation_function(structureTensor, progressProxy, fibre=True):
+def orientation_function(structureTensor, progressProxy):
     symmetricComponents3d = [[0, 0], [0, 1], [0, 2], [1, 1], [1, 2], [2, 2]]
 
     theta = np.zeros(structureTensor.shape[1:], dtype="<f4")
@@ -76,13 +56,11 @@ def orientation_function(structureTensor, progressProxy, fibre=True):
     return theta, phi
 
 def compute_orientation(structure_tensor):
-    """ Compute orientation.
-    
+    """ Compute orientation function.
     Args:
-        structure_tensor (cp.ndarray): Structure tensor.
-    
+        structureTensor (np.ndarray): Structure tensor.
     Returns:
-        tuple: Orientation.
+        tuple: Orientation angles.
     """
     numpy_structure_tensor = cp.asnumpy(structure_tensor)
 
@@ -97,11 +75,12 @@ def compute_orientation(structure_tensor):
     return theta, phi
 
 @numba.njit(parallel=True, cache=True)
-def orientation_function_axial(structureTensor, progressProxy, fibre=True):
+def orientation_function_axial(structureTensor, progressProxy, reference_vector):
+
     symmetricComponents3d = [[0, 0], [0, 1], [0, 2], [1, 1], [1, 2], [2, 2]]
 
     theta = np.zeros(structureTensor.shape[1:], dtype="<f4")
-    axial_vec = np.array([1, 0, 0], dtype="<f4")
+    axial_vec = np.array(reference_vector, dtype="<f4")
 
     for z in numba.prange(0, structureTensor.shape[1]):
         for y in range(0, structureTensor.shape[2]):
@@ -126,13 +105,23 @@ def orientation_function_axial(structureTensor, progressProxy, fibre=True):
 
     return theta
 
-def compute_orientation_axial(structure_tensor):
+def compute_orientation_axial(structure_tensor, reference_vector=[1, 0, 0]):
+    """ Compute orientation function for referenced direction.
+
+    Args:
+        structureTensor (np.ndarray): Structure tensor.
+        reference_vector (list): Reference vector for axial direction.
+
+    Returns:
+        np.ndarray: Orientation angles.
+    """
     numpy_structure_tensor = cp.asnumpy(structure_tensor)
 
     with numba_progress.ProgressBar(total=numpy_structure_tensor.shape[1]) as progress:
         numpy_theta= orientation_function_axial(
             numpy_structure_tensor,
-            progress)
+            progress,
+            reference_vector=reference_vector)
             
     theta = cp.asarray(numpy_theta)
     return theta

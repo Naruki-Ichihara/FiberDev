@@ -1,6 +1,6 @@
 from fiberdev import import_image_sequence
 from fiberdev import crop_2D, drop_edges_3D
-from fiberdev import compute_orientation, compute_structure_tensor_cucim
+from fiberdev import compute_orientation, compute_structure_tensor
 import cupy as cp
 import cv2 as cv
 import pandas as pd
@@ -20,7 +20,7 @@ sigma = 10 # Noise scale
 volume = import_image_sequence(path_of_images, number_of_images, 4, "tif", process=lambda x: crop_2D(start_pxes, end_pxes, x), path_for_save=path_of_save_dir + "volume/volume.npy", cvt_control=cv.COLOR_BGR2GRAY)
 
 # Compute structure tensor
-structure_tensor = compute_structure_tensor_cucim(volume, sigma=sigma)
+structure_tensor = compute_structure_tensor(volume, sigma=sigma)
 
 # Compute prientation
 inplane, outofplane = compute_orientation(structure_tensor)
